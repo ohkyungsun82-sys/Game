@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="ko" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Battle Arena - 실시간 단어 배틀</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Jua&display=swap" rel="stylesheet">
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Socket.io Client -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        jua: ['Jua', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', 'Jua', sans-serif; }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        .animate-float { animation: float 3s ease-in-out infinite; }
+        .word-bubble {
+            animation: popUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        @keyframes popUp {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="h-full bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900 text-slate-100 flex flex-col min-h-screen">
+
+    <script>
+        // Web Audio API Sound Generator
+        const soundEffect = {
+            ctx: null,
+            init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); },
+            playPop() {
+                try {
+                    this.init();
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.frequency.setValueAtTime(400, this.ctx.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(800, this.ctx.currentTime + 0.1);
+                    gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+                    osc.connect(gain); gain.connect(this.ctx.destination);
+                    osc.start(); osc.stop(this.ctx.currentTime + 0.1);
+                } catch(e) {}
+            },
+            playScore() {
+                try {
+                    this.init();
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523.25, now);
+                    osc.frequency.setValueAtTime(659.25, now + 0.08);
+                    osc.frequency.setValueAtTime(783.99, now + 0.16);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                    osc.connect(gain); gain.connect(this.ctx.destination);
+                    osc.start(); osc.stop(now + 0.3);
+                } catch(e) {}
+            },
+            playWin() {
+                try {
+                    this.init();
+                    const now = this.ctx.currentTime;
+                    [440, 554.37, 659.25, 880].forEach((freq, idx) => {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.frequency.setValueAtTime(freq, now + idx * 0.1);
+                        gain.gain.setValueAtTime(0.2, now + idx * 0.1);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.1 + 0.3);
+                        osc.connect(gain); gain.connect(this.ctx.destination);
+                        osc.start(now + idx * 0.1); osc.stop(now + idx * 0.1 + 0.3);
+                    });
+                } catch(e) {}
+            },
+            playError() {
+                try {
+                    this.init();
+                    const now = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.setValueAtTime(100, now + 0.15);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                    osc.connect(gain); gain.connect(this.ctx.destination);
+                    osc.start(); osc.stop(now + 0.3);
+                } catch(e) {}
+            }
+        };
+    </script>
+
+    <!-- App Container -->
+    <div id="app" class="flex-1 flex flex-col items-center justify-center p-4 max-w-4xl mx-auto w-full relative">
+
+        <!-- Notification Toast -->
+        <div id="toast" class="fixed top-6 right-6 z-50 transform translate-y-[-150%] transition-transform duration-300 bg-slate-900 border border-slate-700 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center space-x-3">
+            <i id="toast-icon" class="fas fa-info-circle text-indigo-400 text-lg"></i>
+            <span id="toast-msg" class="font-medium">알림 메시지</span>
+        </div>
+
+        <!-- 1. AUTH VIEW -->
+        <div id="auth-view" class="w-full max-w-md glass-card rounded-3xl p-8 shadow-2xl text-slate-800 transition-all duration-300">
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-3xl shadow-xl mb-4 text-white text-3xl animate-float">
+                    <i class="fas fa-bolt"></i>
+                </div>
+                <h1 class="text-3xl font-extrabold font-jua text-indigo-900 tracking-wide">WORD BATTLE ARENA</h1>
+                <p class="text-slate-500 text-sm mt-1">Render 클라우드 기반 실시간 단어 대결!</p>
+            </div>
+
+            <!-- Tab Switcher -->
+            <div class="flex bg-slate-100 p-1.5 rounded-2xl mb-6 shadow-inner">
+                <button id="tab-login" onclick="switchAuthTab('login')" class="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all bg-white text-indigo-700 shadow-md">로그인</button>
+                <button id="tab-register" onclick="switchAuthTab('register')" class="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-700">회원가입</button>
+            </div>
+
+            <!-- Login Form -->
+            <form id="form-login" onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">아이디</label>
+                    <input type="text" id="login-username" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm font-medium" placeholder="아이디">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">비밀번호</label>
+                    <input type="password" id="login-password" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm font-medium" placeholder="비밀번호">
+                </div>
+                <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/30 transition-all">로그인하기</button>
+            </form>
+
+            <!-- Register Form -->
+            <form id="form-register" onsubmit="handleRegister(event)" class="space-y-4 hidden">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">닉네임</label>
+                    <input type="text" id="reg-nickname" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-sm font-medium" placeholder="닉네임">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">아이디</label>
+                    <input type="text" id="reg-username" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-sm font-medium" placeholder="사용할 아이디">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">비밀번호</label>
+                    <input type="password" id="reg-password" required class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none text-sm font-medium" placeholder="비밀번호 설정">
+                </div>
+                <button type="submit" class="w-full py-3.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl shadow-lg shadow-purple-500/30 transition-all">회원가입 및 자동 로그인</button>
+            </form>
+        </div>
+
+        <!-- 2. LOBBY VIEW -->
+        <div id="lobby-view" class="w-full hidden space-y-6">
+            <div class="glass-card rounded-2xl p-4 shadow-lg flex items-center justify-between text-slate-800">
+                <div class="flex items-center space-x-3">
+                    <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-xl shadow-md">
+                        <i class="fas fa-user-astronaut"></i>
+                    </div>
+                    <div>
+                        <div id="user-display-name" class="font-bold text-lg text-indigo-900">사용자</div>
+                        <div class="text-xs text-slate-500">클라우드 서버 자동 로그인 연결됨</div>
+                    </div>
+                </div>
+                <button onclick="handleLogout()" class="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-sm rounded-xl transition-all">
+                    <i class="fas fa-sign-out-alt mr-1"></i>로그아웃
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="md:col-span-1 glass-card rounded-2xl p-6 shadow-lg flex flex-col justify-between text-slate-800">
+                    <div>
+                        <h2 class="text-xl font-bold font-jua text-indigo-900 mb-2"><i class="fas fa-plus-circle text-indigo-600 mr-2"></i>방 만들기</h2>
+                        <div class="space-y-3 mt-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-600 mb-1">방 제목</label>
+                                <input type="text" id="room-title-input" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="단어 고수 모여라!">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-600 mb-1">게임 주제</label>
+                                <select id="room-topic-select" class="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                                    <option value="동물">🐾 동물</option>
+                                    <option value="음식">🍎 음식/과일</option>
+                                    <option value="국가/도시">🌍 국가 및 도시</option>
+                                    <option value="직업">💼 직업</option>
+                                    <option value="영화/애니">🎬 영화 및 애니메이션</option>
+                                    <option value="브랜드/물건">🏷️ 브랜드 및 물건</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <button onclick="createRoom()" class="mt-6 w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-xl shadow-md transition-all text-sm">
+                        방 생성하기
+                    </button>
+                </div>
+
+                <div class="md:col-span-2 glass-card rounded-2xl p-6 shadow-lg flex flex-col text-slate-800">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-bold font-jua text-indigo-900"><i class="fas fa-door-open text-indigo-600 mr-2"></i>게임 방 목록</h2>
+                        <button onclick="loadRooms()" class="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"><i class="fas fa-sync-alt"></i></button>
+                    </div>
+                    <div id="room-list-container" class="flex-1 overflow-y-auto space-y-3 max-h-[320px] pr-1">
+                        <!-- Rooms dynamic list -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. ROOM WAITING VIEW -->
+        <div id="room-view" class="w-full hidden space-y-6">
+            <div class="glass-card rounded-3xl p-8 shadow-2xl text-slate-800">
+                <div class="flex items-center justify-between border-b border-slate-200 pb-6 mb-6">
+                    <div>
+                        <span id="current-room-badge" class="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-bold">주제: 동물</span>
+                        <h2 id="current-room-title" class="text-3xl font-extrabold font-jua text-indigo-900 mt-2">방 제목</h2>
+                    </div>
+                    <button onclick="leaveRoom()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm transition-all">방 나가기</button>
+                </div>
+
+                <div class="mb-8">
+                    <h3 class="text-sm font-bold uppercase tracking-wider text-slate-500 mb-4">참가한 플레이어 (<span id="player-count">1</span>/2)</h3>
+                    <div id="room-players-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-4"></div>
+                </div>
+
+                <div id="room-host-controls" class="text-center"></div>
+            </div>
+        </div>
+
+        <!-- 4. GAME VIEW -->
+        <div id="game-view" class="w-full hidden space-y-4">
+            <div class="glass-card rounded-2xl p-4 shadow-lg flex items-center justify-between text-slate-800">
+                <div>
+                    <span class="text-xs font-bold text-slate-400 uppercase">게임 주제</span>
+                    <div id="game-topic-display" class="text-2xl font-extrabold font-jua text-indigo-700">동물</div>
+                </div>
+                <div class="flex flex-col items-center">
+                    <span class="text-xs font-bold text-slate-400 uppercase">남은 시간</span>
+                    <div id="game-timer" class="text-3xl font-black font-jua text-rose-600">30초</div>
+                </div>
+                <div class="text-right">
+                    <span class="text-xs font-bold text-slate-400 uppercase">득점 규칙</span>
+                    <div class="text-sm font-bold text-purple-700">올바른 단어당 +5점</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- My Panel -->
+                <div class="glass-card rounded-2xl p-6 shadow-xl border-2 border-indigo-500/30 flex flex-col justify-between text-slate-800 relative">
+                    <div class="absolute top-0 right-0 px-4 py-1 bg-indigo-600 text-white font-bold text-xs rounded-bl-xl">나</div>
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 id="my-game-name" class="font-bold text-lg text-indigo-900">내 닉네임</h3>
+                            <div class="text-3xl font-black font-jua text-indigo-600"><span id="my-game-score">0</span>점</div>
+                        </div>
+                        <div class="mb-4">
+                            <span class="text-xs font-bold text-slate-400 uppercase">내가 입력한 단어들</span>
+                            <div id="my-words-feed" class="flex flex-wrap gap-1.5 mt-2 min-h-[60px] max-h-[100px] overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-200">
+                                <span class="text-slate-400 text-xs italic">입력 대기 중...</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <form onsubmit="submitWord(event)" class="flex space-x-2">
+                            <input type="text" id="word-input" autocomplete="off" placeholder="주제에 맞는 단어를 입력하세요!" class="flex-1 px-4 py-3.5 bg-slate-50 border-2 border-indigo-200 rounded-xl text-sm font-bold focus:border-indigo-600 focus:outline-none">
+                            <button type="submit" class="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-md">입력</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Opponent Panel -->
+                <div class="glass-card rounded-2xl p-6 shadow-xl border-2 border-purple-500/30 flex flex-col justify-between text-slate-800 relative">
+                    <div class="absolute top-0 right-0 px-4 py-1 bg-purple-600 text-white font-bold text-xs rounded-bl-xl">상대방</div>
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 id="opp-game-name" class="font-bold text-lg text-purple-900">상대방 닉네임</h3>
+                            <div class="text-3xl font-black font-jua text-purple-600"><span id="opp-game-score">0</span>점</div>
+                        </div>
+                        <div class="mb-4">
+                            <span class="text-xs font-bold text-slate-400 uppercase">상대방이 입력한 단어들</span>
+                            <div id="opp-words-feed" class="flex flex-wrap gap-1.5 mt-2 min-h-[60px] max-h-[100px] overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-200">
+                                <span class="text-slate-400 text-xs italic">상대방의 입력을 기다리는 중...</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-4 py-3 px-4 bg-purple-50 rounded-xl border border-purple-100 flex items-center justify-between">
+                        <span class="text-xs font-bold text-purple-700"><i class="fas fa-signal animate-pulse mr-1"></i>실시간 동시 경쟁 중</span>
+                        <span class="text-xs text-purple-500">열심히 타이핑 중...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. RESULT VIEW -->
+        <div id="result-view" class="w-full hidden space-y-6">
+            <div class="glass-card rounded-3xl p-8 shadow-2xl text-slate-800 text-center max-w-lg mx-auto">
+                <div id="result-trophy" class="inline-flex items-center justify-center w-24 h-24 bg-amber-100 text-amber-500 rounded-full text-5xl mb-4 shadow-xl animate-bounce">
+                    <i class="fas fa-trophy"></i>
+                </div>
+                <h2 id="result-title" class="text-4xl font-extrabold font-jua text-indigo-900 mb-2">승리하셨습니다!</h2>
+                <p id="result-subtitle" class="text-slate-500 text-sm mb-6">치열한 접전 끝에 상대를 제압했습니다.</p>
+
+                <div class="grid grid-cols-2 gap-4 mb-8 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <div class="text-center border-r border-slate-200">
+                        <div id="res-my-name" class="text-xs font-bold text-slate-500 mb-1">나</div>
+                        <div class="text-3xl font-black font-jua text-indigo-600"><span id="res-my-score">0</span>점</div>
+                    </div>
+                    <div class="text-center">
+                        <div id="res-opp-name" class="text-xs font-bold text-slate-500 mb-1">상대방</div>
+                        <div class="text-3xl font-black font-jua text-purple-600"><span id="res-opp-score">0</span>점</div>
+                    </div>
+                </div>
+
+                <button onclick="returnToLobby()" class="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/30">
+                    로비로 돌아가기
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const socket = io();
+        let currentUser = JSON.parse(localStorage.getItem('word_battle_user') || 'null');
+        let activeRoom = null;
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-msg');
+            const toastIcon = document.getElementById('toast-icon');
+            toastMsg.innerText = message;
+            toastIcon.className = type === 'error' ? 'fas fa-exclamation-circle text-rose-400 text-lg' : 'fas fa-check-circle text-emerald-400 text-lg';
+            toast.classList.remove('translate-y-[-150%]');
+            toast.classList.add('translate-y-0');
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0');
+                toast.classList.add('translate-y-[-150%]');
+            }, 3000);
+        }
+
+        function switchAuthTab(tab) {
+            const loginForm = document.getElementById('form-login');
+            const regForm = document.getElementById('form-register');
+            const tabLogin = document.getElementById('tab-login');
+            const tabReg = document.getElementById('tab-register');
+            if (tab === 'login') {
+                loginForm.classList.remove('hidden'); regForm.classList.add('hidden');
+                tabLogin.className = 'flex-1 py-2.5 rounded-xl font-bold text-sm bg-white text-indigo-700 shadow-md';
+                tabReg.className = 'flex-1 py-2.5 rounded-xl font-bold text-sm text-slate-500';
+            } else {
+                loginForm.classList.add('hidden'); regForm.classList.remove('hidden');
+                tabReg.className = 'flex-1 py-2.5 rounded-xl font-bold text-sm bg-white text-purple-700 shadow-md';
+                tabLogin.className = 'flex-1 py-2.5 rounded-xl font-bold text-sm text-slate-500';
+            }
+        }
+
+        function handleRegister(e) {
+            e.preventDefault();
+            const nickname = document.getElementById('reg-nickname').value.trim();
+            const username = document.getElementById('reg-username').value.trim();
+            const password = document.getElementById('reg-password').value.trim();
+
+            socket.emit('auth:register', { nickname, username, password }, (res) => {
+                if (!res.success) {
+                    showToast(res.message, 'error');
+                    soundEffect.playError();
+                    return;
+                }
+                currentUser = res.user;
+                localStorage.setItem('word_battle_user', JSON.stringify(currentUser));
+                soundEffect.playWin();
+                showToast('회원가입 완료! 자동 로그인되었습니다.', 'success');
+                enterLobby();
+            });
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const username = document.getElementById('login-username').value.trim();
+            const password = document.getElementById('login-password').value.trim();
+
+            socket.emit('auth:login', { username, password }, (res) => {
+                if (!res.success) {
+                    showToast(res.message, 'error');
+                    soundEffect.playError();
+                    return;
+                }
+                currentUser = res.user;
+                localStorage.setItem('word_battle_user', JSON.stringify(currentUser));
+                soundEffect.playWin();
+                showToast(`${currentUser.nickname}님 환영합니다!`, 'success');
+                enterLobby();
+            });
+        }
+
+        function handleLogout() {
+            currentUser = null;
+            localStorage.removeItem('word_battle_user');
+            location.reload();
+        }
+
+        window.onload = function() {
+            if (currentUser) {
+                enterLobby();
+            }
+        };
+
+        function enterLobby() {
+            document.getElementById('auth-view').classList.add('hidden');
+            document.getElementById('lobby-view').classList.remove('hidden');
+            document.getElementById('room-view').classList.add('hidden');
+            document.getElementById('game-view').classList.add('hidden');
+            document.getElementById('result-view').classList.add('hidden');
+
+            document.getElementById('user-display-name').innerText = `${currentUser.nickname} (${currentUser.username})`;
+            loadRooms();
+        }
+
+        function loadRooms() {
+            socket.emit('room:list', (rooms) => {
+                renderRoomList(rooms);
+            });
+        }
+
+        socket.on('rooms:updated', (rooms) => {
+            renderRoomList(rooms);
+        });
+
+        function renderRoomList(rooms) {
+            const container = document.getElementById('room-list-container');
+            container.innerHTML = '';
+            if (rooms.length === 0) {
+                container.innerHTML = `<div class="text-center py-12 text-slate-400 text-sm italic">현재 생성된 방이 없습니다.</div>`;
+                return;
+            }
+            rooms.forEach(room => {
+                const isFull = room.players.length >= 2;
+                const card = document.createElement('div');
+                card.className = `p-4 rounded-2xl border flex items-center justify-between ${room.status === 'waiting' ? 'bg-white border-slate-200' : 'bg-slate-50 opacity-75'}`;
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-center space-x-2 mb-1">
+                            <span class="px-2.5 py-0.5 bg-indigo-100 text-indigo-700 rounded-full text-xs font-bold">${room.topic}</span>
+                        </div>
+                        <h3 class="font-bold text-indigo-900 text-base">${room.title}</h3>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <span class="text-xs font-bold px-3 py-1 rounded-full ${isFull ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}">${room.players.length}/2명</span>
+                        ${room.status === 'waiting' ? `<button onclick="joinRoom('${room.id}')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl">참여하기</button>` : `<span class="text-xs font-bold text-slate-400">게임중</span>`}
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function createRoom() {
+            const title = document.getElementById('room-title-input').value.trim() || '실시간 단어 배틀';
+            const topic = document.getElementById('room-topic-select').value;
+            socket.emit('room:create', { title, topic, user: currentUser }, (res) => {
+                if (res.success) {
+                    joinRoom(res.room.id);
+                }
+            });
+        }
+
+        function joinRoom(roomId) {
+            socket.emit('room:join', { roomId, user: currentUser }, (res) => {
+                if (!res.success) {
+                    showToast(res.message, 'error');
+                    return;
+                }
+                activeRoom = res.room;
+                renderRoomView();
+            });
+        }
+
+        socket.on('room:updated', (room) => {
+            activeRoom = room;
+            if (!document.getElementById('room-view').classList.contains('hidden')) {
+                renderRoomView();
+            }
+        });
+
+        function leaveRoom() {
+            if (activeRoom) {
+                socket.emit('room:leave', { roomId: activeRoom.id, user: currentUser });
+                activeRoom = null;
+            }
+            enterLobby();
+        }
+
+        function renderRoomView() {
+            document.getElementById('lobby-view').classList.add('hidden');
+            document.getElementById('room-view').classList.remove('hidden');
+
+            document.getElementById('current-room-badge').innerText = `주제: ${activeRoom.topic}`;
+            document.getElementById('current-room-title').innerText = activeRoom.title;
+            document.getElementById('player-count').innerText = activeRoom.players.length;
+
+            const grid = document.getElementById('room-players-grid');
+            grid.innerHTML = '';
+            activeRoom.players.forEach(player => {
+                const isHost = player.id === activeRoom.host;
+                const isMe = player.id === currentUser.id;
+                const pCard = document.createElement('div');
+                pCard.className = 'p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center space-x-4';
+                pCard.innerHTML = `
+                    <div class="w-12 h-12 rounded-2xl ${isHost ? 'bg-amber-500' : 'bg-indigo-600'} text-white flex items-center justify-center font-bold text-xl">
+                        <i class="fas ${isHost ? 'fa-crown' : 'fa-user'}"></i>
+                    </div>
+                    <div>
+                        <div class="font-bold text-indigo-900">${player.nickname} ${isMe ? '(나)' : ''}</div>
+                        <div class="text-xs text-slate-500">${isHost ? '방장' : '참가자'}</div>
+                    </div>
+                `;
+                grid.appendChild(pCard);
+            });
+
+            const controls = document.getElementById('room-host-controls');
+            const isHost = activeRoom.host === currentUser.id;
+            if (activeRoom.players.length < 2) {
+                controls.innerHTML = `
+                    <button onclick="addBot()" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-xl shadow-md">
+                        <i class="fas fa-robot mr-2"></i>AI 봇 소환하기
+                    </button>
+                `;
+            } else if (isHost) {
+                controls.innerHTML = `
+                    <button onclick="startServerGame()" class="px-8 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-extrabold text-lg rounded-2xl shadow-xl animate-pulse">
+                        <i class="fas fa-play mr-2"></i>게임 시작하기!
+                    </button>
+                `;
+            } else {
+                controls.innerHTML = `<p class="text-indigo-600 font-bold animate-pulse">방장이 게임을 시작하기를 기다리는 중...</p>`;
+            }
+        }
+
+        function addBot() {
+            socket.emit('room:add-bot', { roomId: activeRoom.id });
+        }
+
+        function startServerGame() {
+            socket.emit('game:start', { roomId: activeRoom.id });
+        }
+
+        socket.on('game:started', (gameState) => {
+            launchGameUI(gameState);
+        });
+
+        socket.on('game:tick', (gameState) => {
+            updateGameUI(gameState);
+        });
+
+        socket.on('game:overtime', (gameState) => {
+            soundEffect.playError();
+            showToast('동점 발생! 연장전 10초 추가!', 'error');
+            updateGameUI(gameState);
+        });
+
+        socket.on('game:word-accepted', ({ scores, words }) => {
+            soundEffect.playScore();
+            if (activeRoom && activeRoom.gameState) {
+                activeRoom.gameState.scores = scores;
+                activeRoom.gameState.words = words;
+                updateGameUI(activeRoom.gameState);
+            }
+        });
+
+        socket.on('game:ended', ({ gameState }) => {
+            showResultUI(gameState);
+        });
+
+        function launchGameUI(state) {
+            document.getElementById('room-view').classList.add('hidden');
+            document.getElementById('game-view').classList.remove('hidden');
+            document.getElementById('result-view').classList.add('hidden');
+
+            activeRoom.gameState = state;
+            document.getElementById('game-topic-display').innerText = state.topic;
+            document.getElementById('my-game-name').innerText = currentUser.nickname;
+            const opp = state.p1.id === currentUser.id ? state.p2 : state.p1;
+            document.getElementById('opp-game-name').innerText = opp.nickname;
+            updateGameUI(state);
+        }
+
+        function updateGameUI(state) {
+            const timerEl = document.getElementById('game-timer');
+            timerEl.innerText = state.timeRemaining + '초';
+            if (state.isOvertime) {
+                timerEl.className = 'text-3xl font-black font-jua text-amber-500 animate-pulse';
+            } else {
+                timerEl.className = 'text-3xl font-black font-jua text-rose-600';
+            }
+
+            const myId = currentUser.id;
+            const oppId = state.p1.id === myId ? state.p2.id : state.p1.id;
+
+            document.getElementById('my-game-score').innerText = state.scores[myId] || 0;
+            document.getElementById('opp-game-score').innerText = state.scores[oppId] || 0;
+
+            const myWords = state.words[myId] || [];
+            const myFeed = document.getElementById('my-words-feed');
+            myFeed.innerHTML = myWords.length === 0 ? `<span class="text-slate-400 text-xs italic">입력 대기 중...</span>` : myWords.map(w => `<span class="px-2.5 py-1 bg-indigo-100 text-indigo-700 font-bold text-xs rounded-lg word-bubble">${w} (+5)</span>`).join('');
+
+            const oppWords = state.words[oppId] || [];
+            const oppFeed = document.getElementById('opp-words-feed');
+            oppFeed.innerHTML = oppWords.length === 0 ? `<span class="text-slate-400 text-xs italic">상대방 대기 중...</span>` : oppWords.map(w => `<span class="px-2.5 py-1 bg-purple-100 text-purple-700 font-bold text-xs rounded-lg word-bubble">${w} (+5)</span>`).join('');
+        }
+
+        function submitWord(e) {
+            e.preventDefault();
+            const input = document.getElementById('word-input');
+            const word = input.value.trim();
+            if (!word || !activeRoom) return;
+
+            socket.emit('game:submit-word', { roomId: activeRoom.id, userId: currentUser.id, word });
+            input.value = '';
+        }
+
+        function showResultUI(state) {
+            document.getElementById('game-view').classList.add('hidden');
+            document.getElementById('result-view').classList.remove('hidden');
+
+            const myId = currentUser.id;
+            const opp = state.p1.id === myId ? state.p2 : state.p1;
+            const myScore = state.scores[myId] || 0;
+            const oppScore = state.scores[opp.id] || 0;
+
+            document.getElementById('res-my-name').innerText = currentUser.nickname + ' (나)';
+            document.getElementById('res-opp-name').innerText = opp.nickname;
+            document.getElementById('res-my-score').innerText = myScore;
+            document.getElementById('res-opp-score').innerText = oppScore;
+
+            const titleEl = document.getElementById('result-title');
+            const subEl = document.getElementById('result-subtitle');
+            const trophyEl = document.getElementById('result-trophy');
+
+            if (myScore > oppScore) {
+                titleEl.innerText = '승리하셨습니다!';
+                subEl.innerText = '뛰어난 타이핑 실력으로 상대를 제압했습니다.';
+                trophyEl.className = 'inline-flex items-center justify-center w-24 h-24 bg-amber-100 text-amber-500 rounded-full text-5xl mb-4 shadow-xl animate-bounce';
+                trophyEl.innerHTML = '<i class="fas fa-trophy"></i>';
+                soundEffect.playWin();
+                confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 } });
+            } else if (myScore < oppScore) {
+                titleEl.innerText = '패배하였습니다...';
+                subEl.innerText = '아쉽게도 상대방이 더 높은 점수를 기록했습니다.';
+                trophyEl.className = 'inline-flex items-center justify-center w-24 h-24 bg-slate-200 text-slate-500 rounded-full text-5xl mb-4 shadow-xl';
+                trophyEl.innerHTML = '<i class="fas fa-flag"></i>';
+                soundEffect.playError();
+            } else {
+                titleEl.innerText = '무승부입니다!';
+                subEl.innerText = '두 플레이어의 점수가 동률입니다.';
+                trophyEl.innerHTML = '<i class="fas fa-handshake"></i>';
+                soundEffect.playWin();
+            }
+        }
+
+        function returnToLobby() {
+            if (activeRoom) {
+                socket.emit('room:leave', { roomId: activeRoom.id, user: currentUser });
+                activeRoom = null;
+            }
+            enterLobby();
+        }
+    </script>
+</body>
+</html>
