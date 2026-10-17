@@ -181,7 +181,7 @@
                     </div>
                     <div>
                         <div id="user-display-name" class="font-bold text-lg text-indigo-900">사용자</div>
-                        <div class="text-xs text-slate-500">클라우드 서버 자동 로그인 연결됨</div>
+                        <div id="user-stats" class="text-xs text-slate-500">승수: 0승 | 패배: 0패</div>
                     </div>
                 </div>
                 <button onclick="handleLogout()" class="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-sm rounded-xl transition-all">
@@ -321,7 +321,7 @@
                 <h2 id="result-title" class="text-4xl font-extrabold font-jua text-indigo-900 mb-2">승리하셨습니다!</h2>
                 <p id="result-subtitle" class="text-slate-500 text-sm mb-6">치열한 접전 끝에 상대를 제압했습니다.</p>
 
-                <div class="grid grid-cols-2 gap-4 mb-8 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div class="grid grid-cols-2 gap-4 mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-200">
                     <div class="text-center border-r border-slate-200">
                         <div id="res-my-name" class="text-xs font-bold text-slate-500 mb-1">나</div>
                         <div class="text-3xl font-black font-jua text-indigo-600"><span id="res-my-score">0</span>점</div>
@@ -329,6 +329,24 @@
                     <div class="text-center">
                         <div id="res-opp-name" class="text-xs font-bold text-slate-500 mb-1">상대방</div>
                         <div class="text-3xl font-black font-jua text-purple-600"><span id="res-opp-score">0</span>점</div>
+                    </div>
+                </div>
+
+                <!-- 승리 보상: 단어 추가 영역 (욕설/19금 필터링 적용) -->
+                <div class="mb-6 p-4 bg-purple-50 rounded-2xl border border-purple-200 text-left">
+                    <h3 class="text-sm font-bold text-purple-900 mb-1"><i class="fas fa-plus-circle mr-1 text-purple-600"></i>승리 보상: 사전에 단어 추가하기</h3>
+                    <p class="text-xs text-slate-500 mb-3">승리 시 원하는 단어를 사전에 영구 등록할 수 있습니다. (비속어/19금 차단)</p>
+                    <div class="flex space-x-2">
+                        <select id="custom-word-topic" class="px-2.5 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-700">
+                            <option value="동물">동물</option>
+                            <option value="음식">음식</option>
+                            <option value="국가/도시">국가/도시</option>
+                            <option value="직업">직업</option>
+                            <option value="영화/애니">영화/애니</option>
+                            <option value="브랜드/물건">브랜드/물건</option>
+                        </select>
+                        <input type="text" id="custom-word-input" placeholder="한글 2~10자 입력" class="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold focus:outline-none">
+                        <button onclick="submitCustomWord()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-md">등록</button>
                     </div>
                 </div>
 
@@ -434,6 +452,7 @@
             document.getElementById('result-view').classList.add('hidden');
 
             document.getElementById('user-display-name').innerText = `${currentUser.nickname} (${currentUser.username})`;
+            document.getElementById('user-stats').innerText = `승수: ${currentUser.wins || 0}승 | 패배: ${currentUser.losses || 0}패`;
             loadRooms();
         }
 
@@ -675,6 +694,29 @@
                 trophyEl.innerHTML = '<i class="fas fa-handshake"></i>';
                 soundEffect.playWin();
             }
+        }
+
+        // 승리 후 커스텀 단어 등록 함수
+        function submitCustomWord() {
+            const topic = document.getElementById('custom-word-topic').value;
+            const word = document.getElementById('custom-word-input').value.trim();
+            if (!word) {
+                showToast('추가할 단어를 입력해주세요.', 'error');
+                return;
+            }
+
+            socket.emit('word:add-custom', { userId: currentUser.id, topic, word }, (res) => {
+                if (!res.success) {
+                    showToast(res.message, 'error');
+                    soundEffect.playError();
+                } else {
+                    showToast(res.message, 'success');
+                    soundEffect.playWin();
+                    currentUser = res.user; // 승수 반영된 유저 정보 갱신
+                    localStorage.setItem('word_battle_user', JSON.stringify(currentUser));
+                    document.getElementById('custom-word-input').value = '';
+                }
+            });
         }
 
         function returnToLobby() {
