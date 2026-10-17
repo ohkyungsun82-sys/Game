@@ -37,10 +37,9 @@ function saveDB(db) {
 
 // Initialize DB on startup
 let db = loadDB();
-// Reset any active room states from previous server restarts
 db.rooms.forEach(r => {
     r.status = 'waiting';
-    r.players = r.players.slice(0, 1); // keep host only or clear
+    r.players = r.players.slice(0, 1);
 });
 saveDB(db);
 
@@ -50,18 +49,18 @@ const topicDictionary = {
     "사자", "호랑이", "코끼리", "기린", "원숭이", "토끼", "강아지", "고양이", "햄스터", "다람쥐", 
     "여우", "늑대", "곰", "판다", "치타", "얼룩말", "하마", "코뿔소", "캥거루", "타조", 
     "독수리", "참새", "펭귄", "돌고래", "상어", "고래", "문어", "오징어", "거북이", "악어",
-    "표범", "재규어", "하이에나", "스컹크", "너구리", "오줌싸개너구리", "미국너구리", "코알라", "나무늘보", "침팬지",
-    "오랑우탄", "고릴라", "개비", "미어캣", "사막여우", "수달", "해달", "물개", "바다사자", "바다코끼리",
-    "고슴도치", "두더지", "박쥐", "날다람쥐", "청설모", "족제비", "담비", "오수리", "스라소니", "퓨마",
-    "순록", "엘크", "무스", "고라니", "노루", "사슴", "멧돼지", "반달가슴곰", "불곰", "북극곰",
-    "나무늘보", "아르마딜로", "개미핥기", "오리너구리", "바늘두더지", "캥거루쥐", "쿼카", "왈라비", "타즈매니아데빌", "웜뱃",
-    "카멜레온", "이구아나", "도마뱀", "뱀", "구렁이", "살모사", "코브라", "아나콘다", "비단뱀", "방울뱀",
-    "개구리", "두꺼비", "도롱뇽", "장수지렁이", "달팽이", "민달팽이", "지렁이", "거미", "전갈", "지네",
-    "매", "부엉이", "올빼미", "까마귀", "까치", "비둘기", "제비", "참새", "딱따구리", "앵무새",
-    "공작", "타조", "에뮤", "카이수아", "홍학", "백조", "오리", "거위", "펠리컨", "갈매기",
-    "참치", "연어", "송어", "잉어", "붕어", "금붕어", "상어", "가오리", "해파리", "불가사리",
-    "성게", "해삼", "소라", "전복", "조개", "홍합", "굴", "새우", "게", "랍스터",
-    "사마귀", "메뚜기", "여치", "매미", "잠자리", "나비", "나방", "꿀벌", "말벌", "개미"],
+    "표범", "재규어", "하이에나", "스컹크", "너구리", "코알라", "나무늘보", "침팬지", "오랑우탄", "고릴라",
+    "개비", "미어캣", "사막여우", "수달", "해달", "물개", "바다사자", "바다코끼리", "고슴도치", "두더지",
+    "박쥐", "날다람쥐", "청설모", "족제비", "담비", "오수리", "스라소니", "퓨마", "순록", "엘크",
+    "무스", "고라니", "노루", "사슴", "멧돼지", "반달가슴곰", "불곰", "북극곰", "아르마딜로", "개미핥기",
+    "오리너구리", "바늘두더지", "캥거루쥐", "쿼카", "왈라비", "타즈매니아데빌", "웜뱃", "카멜레온", "이구아나", "도마뱀",
+    "뱀", "구렁이", "살모사", "코브라", "아나콘다", "비단뱀", "방울뱀", "개구리", "두꺼비", "도롱뇽",
+    "장수지렁이", "달팽이", "민달팽이", "지렁이", "거미", "전갈", "지네", "매", "부엉이", "올빼미",
+    "까마귀", "까치", "비둘기", "제비", "딱따구리", "앵무새", "공작", "에뮤", "홍학", "백조",
+    "오리", "거위", "펠리컨", "갈매기", "참치", "연어", "송어", "잉어", "붕어", "금붕어",
+    "가오리", "해파리", "불가사리", "성게", "해삼", "소라", "전복", "조개", "홍합", "굴",
+    "새우", "게", "랍스터", "사마귀", "메뚜기", "여치", "매미", "잠자리", "나비", "나방", "꿀벌", "말벌", "개미"
+  ],
   "음식": [
     "사과", "바나나", "포도", "딸기", "수박", "피자", "치킨", "햄버거", "라면", "김치", 
     "불고기", "떡볶이", "초밥", "파스타", "샐러드", "아이스크림", "케이크", "초콜릿", "만두", "된장찌개", 
@@ -72,7 +71,8 @@ const topicDictionary = {
     "짜장면", "탕수육", "양장피", "팔보채", "우동", "소바", "돈카츠", "규동", "텐동", "타코야키",
     "스테이크", "리조또", "뇨끼", "라자냐", "타코", "부리또", "퀘사디아", "샌드위치", "핫도그", "팬케이크",
     "와플", "마카롱", "푸딩", "빙수", "식혜", "수정과", "녹차", "홍차", "에이드", "스무디",
-    "떡국", "만둣국", "칼국수", "수제비", "잔치국수", "비빔국수", "잡채", "전", "빈대떡", "족발"],
+    "떡국", "만둣국", "칼국수", "수제비", "잔치국수", "비빔국수", "잡채", "전", "빈대떡", "족발"
+  ],
   "국가/도시": [
     "대한민국", "미국", "일본", "중국", "영국", "프랑스", "독일", "이탈리아", "캐나다", "호주", 
     "브라질", "스페인", "스위스", "베트남", "태국", "서울", "도쿄", "뉴욕", "파리", "런던", 
@@ -83,7 +83,7 @@ const topicDictionary = {
     "뮌헨", "프랑크푸르트", "함부르크", "비엔나", "취리히", "제네바", "암스테르담", "브뤼셀", "스톡홀름", "코펜하겐",
     "오슬로", "헬싱키", "프라하", "부다페스트", "바르샤바", "아테네", "이스탄불", "카이로", "두바이", "도하",
     "뉴델리", "뭄바이", "방갈로르", "자카르타", "발리", "쿠알라룸푸르", "마닐라", "하노이", "호치민", "치앙마이",
-    "부에노스아이레스", "산티아고", "리우데자네이루", "상파울루", "멕시코시티", "보고타", "리마", "요하네스버그", "케이프타운", "오클랜드"
+    "부에노스아이레스", "산티아고", "리우데자네이루", "상파울루", "멕시코시티", "보고타", "리마", "요하네스버그", "케이프타운"
   ],
   "직업": [
     "의사", "간호사", "경찰관", "소방관", "요리사", "선생님", "프로그래머", "디자이너", "가수", "배우", 
@@ -118,16 +118,38 @@ const topicDictionary = {
     "태블릿", "스마트워치", "헤드폰", "스피커", "마이크", "웹캠", "외장하드", "USB", "보조배터리", "충전기",
     "공기청정기", "가습기", "제습기", "전자레인지", "오븐", "식기세척기", "인덕션", "믹서기", "커피머신", "토스터",
     "다리미", "드라이기", "고데기", "전동칫솔", "체중계", "캐리어", "배낭", "파우치", "벨트", "목걸이",
-    "반지", "귀걸이", "모자", "목도리", "장갑", "운동화", "구두", "슬리퍼", "패딩", "코트","디올"
+    "반지", "귀걸이", "모자", "목도리", "장갑", "운동화", "구두", "슬리퍼", "패딩", "코트"
   ]
 };
+
+// 금칙어 리스트 (욕설, 19금, 부적절한 단어 차단)
+const forbiddenWords = [
+    '시발', '시바', '새끼', '병신', '개새', '지랄', '존나', '쪽발', '년', '놈', 
+    '야동', '섹스', '성인', '19금', '누드', '바보', '멍청이', '죽어', '꺼져'
+];
+
+// 단어 검증 및 금칙어 필터링 함수
+function validateNewWord(word, topic) {
+    const trimmed = word.trim();
+    if (trimmed.length < 2 || trimmed.length > 10) {
+        return { success: false, message: '단어는 2글자 이상 10글자 이하만 가능합니다.' };
+    }
+    if (forbiddenWords.some(fw => trimmed.includes(fw))) {
+        return { success: false, message: '부적절한 단어(욕설/비속어)나 19금 단어는 추가할 수 없습니다.' };
+    }
+    const koreanRegex = /^[가-힣]+$/;
+    if (!koreanRegex.test(trimmed)) {
+        return { success: false, message: '순우리말(한글) 단어만 추가할 수 있습니다.' };
+    }
+    return { success: true, word: trimmed };
+}
 
 const activeGames = {}; // roomId -> interval timer object
 
 io.on('connection', (socket) => {
     console.log(`User connected: ${socket.id}`);
 
-    // Auth: Register
+    // Auth: Register (password 포함)
     socket.on('auth:register', ({ nickname, username, password }, callback) => {
         db = loadDB();
         if (db.users.some(u => u.username === username)) {
@@ -139,7 +161,8 @@ io.on('connection', (socket) => {
             username,
             password,
             wins: 0,
-            losses: 0
+            losses: 0,
+            customWords: []
         };
         db.users.push(newUser);
         saveDB(db);
@@ -171,7 +194,7 @@ io.on('connection', (socket) => {
             topic,
             host: user.id,
             players: [user],
-            status: 'waiting', // waiting, playing, finished
+            status: 'waiting',
             gameState: null
         };
         db.rooms.push(newRoom);
@@ -273,7 +296,6 @@ io.on('connection', (socket) => {
         io.emit('rooms:updated', db.rooms);
         io.to(roomId).emit('game:started', room.gameState);
 
-        // Start server-side game interval loop
         if (activeGames[roomId]) clearInterval(activeGames[roomId]);
 
         activeGames[roomId] = setInterval(() => {
@@ -288,7 +310,6 @@ io.on('connection', (socket) => {
             let state = currRoom.gameState;
             state.timeRemaining -= 1;
 
-            // Bot simulation logic if p2 is bot
             if (state.p2.isBot && Math.random() < 0.55) {
                 const dict = topicDictionary[state.topic] || topicDictionary["동물"];
                 const botWords = state.words[state.p2.id] || [];
@@ -314,7 +335,6 @@ io.on('connection', (socket) => {
                     clearInterval(activeGames[roomId]);
                     delete activeGames[roomId];
 
-                    // Update user win/loss statistics in DB
                     const winnerId = s1 > s2 ? state.p1.id : (s2 > s1 ? state.p2.id : null);
                     currentDb.users.forEach(u => {
                         if (u.id === state.p1.id || u.id === state.p2.id) {
@@ -348,13 +368,41 @@ io.on('connection', (socket) => {
         const userWords = state.words[userId] || [];
 
         if (userWords.includes(word)) return;
-        if (!dict.includes(word)) return; // Invalid word
+        if (!dict.includes(word)) return;
 
         userWords.push(word);
         state.scores[userId] = (state.scores[userId] || 0) + 5;
         saveDB(db);
 
         io.to(roomId).emit('game:word-accepted', { userId, word, scores: state.scores, words: state.words });
+    });
+
+    // 커스텀 단어 영구 추가 핸들러 (승수 확인 및 금칙어 필터링)
+    socket.on('word:add-custom', ({ userId, topic, word }, callback) => {
+        db = loadDB();
+        const user = db.users.find(u => u.id === userId);
+        if (!user) return callback({ success: false, message: '유저 정보를 찾을 수 없습니다.' });
+
+        if ((user.wins || 0) <= 0) {
+            return callback({ success: false, message: '게임을 승리해야(승수 1 이상) 단어를 추가할 수 있습니다!' });
+        }
+
+        const validation = validateNewWord(word, topic);
+        if (!validation.success) {
+            return callback({ success: false, message: validation.message });
+        }
+
+        if (!topicDictionary[topic]) topicDictionary[topic] = [];
+        if (topicDictionary[topic].includes(validation.word)) {
+            return callback({ success: false, message: '이미 사전에 등록된 단어입니다.' });
+        }
+
+        topicDictionary[topic].push(validation.word);
+        if (!user.customWords) user.customWords = [];
+        user.customWords.push({ topic, word: validation.word });
+        
+        saveDB(db);
+        callback({ success: true, message: `"${validation.word}" 단어가 [${topic}] 사전에 추가되었습니다!`, user });
     });
 
     socket.on('disconnect', () => {
